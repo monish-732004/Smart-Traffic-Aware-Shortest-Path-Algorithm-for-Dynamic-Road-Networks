@@ -1,0 +1,18 @@
+TrafficAwareShortestPath(Graph, source)
+
+Initialize all node distances to infinity
+Set distance of source node to 0
+
+Insert source node into priority queue
+
+While queue is not empty
+    Extract node with minimum distance
+
+    For each neighbor of the node
+        weight = distance + traffic factor
+
+        If new distance < current distance
+            update distance
+            insert neighbor into queue
+
+Return shortest path distances
