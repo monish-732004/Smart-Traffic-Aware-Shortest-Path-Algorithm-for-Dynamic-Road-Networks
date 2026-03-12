@@ -37,6 +37,8 @@ The algorithm is implemented in C and demonstrates the calculation
 of shortest paths in a simulated road network.
 
 ## Author
-Monish Ravibalaji  
+Debaditya Malakar (RA2411028010034)
+Monish Ravibalaji  (RA2411028010013)
+Syed Gaffar Mohammed (RA2411028010047)
 Department of Networking and Communication  
 SRM Institute of Science and Technology
