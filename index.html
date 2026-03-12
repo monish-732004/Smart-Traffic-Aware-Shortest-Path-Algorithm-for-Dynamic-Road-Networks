@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Traffic-Aware Shortest Path — Dijkstra Visualiser</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400;1,500&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,500;1,8..60,300;1,8..60,400&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream: #f8f4ed;
+  --cream-dark: #efe9de;
+  --cream-darker: #e5ddd0;
+  --ink: #1e1b16;
+  --ink-mid: #4a4540;
+  --ink-light: #8a8078;
+  --ink-faint: rgba(30,27,22,0.1);
+  --red: #8b1a1a;
+  --red-soft: rgba(139,26,26,0.08);
+  --teal: #1a5c5c;
+  --teal-soft: rgba(26,92,92,0.08);
+  --gold: #8b6914;
+  --gold-soft: rgba(139,105,20,0.1);
+  --rule: rgba(30,27,22,0.13);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; }
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Source Serif 4', 'Georgia', serif;
+  font-weight: 300;
+  min-height: 100vh;
+}
+
+/* Subtle paper texture overlay */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='f'%3E%3CfeTurbulence baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23f)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ── Page Shell ── */
+.page-wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
+
+/* ── Masthead ── */
+.masthead {
+  border-bottom: 3px double var(--rule);
+  padding: 36px 0 28px;
+  margin-bottom: 32px;
+}
+.masthead-kicker {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-light);
+  margin-bottom: 10px;
+}
+.masthead-title {
+  font-family: 'Playfair Display', 'Georgia', serif;
+  font-size: clamp(1.9rem, 4.5vw, 3.2rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+.masthead-title em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--red);
+}
+.masthead-sub {
+  font-size: 1.05rem;
+  font-style: italic;
+  color: var(--ink-mid);
+  margin-top: 8px;
+  font-weight: 300;
+  max-width: 640px;
+  line-height: 1.6;
+}
+.byline {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--ink-light);
+  margin-top: 14px;
+  line-height: 1.8;
+}
+.byline strong { color: var(--ink-mid); font-weight: 500; }
+
+/* Decorative column rule */
+.col-rule { width: 1px; background: var(--rule); align-self: stretch; flex-shrink: 0; }
+
+/* ── Section labels ── */
+.section-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-light);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 5px;
+  margin-bottom: 14px;
+}
+
+/* ── Cards ── */
+.card {
+  background: #faf7f1;
+  border: 1px solid var(--rule);
+  padding: 20px;
+}
+.card + .card { border-top: none; }
+
+/* ── SVG Graph ── */
+.node-circle {
+  fill: var(--cream);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  transition: fill 0.45s, stroke 0.45s, stroke-width 0.45s;
+}
+.node-circle.source  { fill: #f5ede0; stroke: var(--gold); stroke-width: 2.5; }
+.node-circle.current { fill: #e8f0f0; stroke: var(--teal); stroke-width: 2.5; }
+.node-circle.visited { fill: #f0ebe8; stroke: var(--red);  stroke-width: 2;   }
+
+.node-label {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 16px;
+  font-weight: 500;
+  fill: var(--ink);
+  dominant-baseline: middle;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.dist-badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px;
+  fill: var(--ink-light);
+  text-anchor: middle;
+  transition: fill 0.3s;
+}
+.dist-badge.live    { fill: var(--teal); font-weight: 500; }
+.dist-badge.settled { fill: var(--red);  }
+
+.edge-path {
+  fill: none;
+  stroke: rgba(30,27,22,0.18);
+  stroke-width: 1.5;
+  transition: stroke 0.4s, stroke-width 0.4s;
+}
+.edge-path.examining {
+  stroke: var(--teal);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+  animation: flowDash 0.7s linear infinite;
+}
+.edge-path.relaxed {
+  stroke: var(--red);
+  stroke-width: 2.5;
+}
+@keyframes flowDash { to { stroke-dashoffset: -8; } }
+
+.edge-lbl {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  fill: var(--ink-light);
+  text-anchor: middle;
+}
+.edge-sub {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  fill: var(--ink-faint);
+  text-anchor: middle;
+  fill-opacity: 0.55;
+}
+
+/* ── Controls ── */
+.ctrl-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.btn {
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-size: 14px;
+  font-style: italic;
+  padding: 6px 20px;
+  border: 1px solid var(--rule);
+  background: var(--cream-dark);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  letter-spacing: 0.02em;
+}
+.btn:hover:not(:disabled) { background: var(--cream-darker); border-color: rgba(30,27,22,0.3); }
+.btn:disabled { opacity: 0.3; cursor: default; }
+.btn.primary {
+  background: var(--red);
+  color: var(--cream);
+  border-color: var(--red);
+  font-style: normal;
+  font-weight: 500;
+}
+.btn.primary:hover:not(:disabled) { background: #7a1616; border-color: #7a1616; }
+.step-pill {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-light);
+  border: 1px solid var(--rule);
+  padding: 4px 12px;
+  background: transparent;
+}
+
+/* ── Distance table ── */
+.dist-table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.dist-table thead th {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-light);
+  border-bottom: 1px solid var(--rule);
+  padding: 0 8px 7px;
+  text-align: left;
+  font-weight: 400;
+}
+.dist-table tbody td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(30,27,22,0.05);
+  color: var(--ink);
+  transition: color 0.3s;
+  font-weight: 300;
+}
+.dist-table tbody tr:last-child td { border-bottom: none; }
+.mono { font-family: 'IBM Plex Mono', monospace; }
+
+/* ── Matrix grid ── */
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+.m-cell {
+  text-align: center;
+  padding: 5px 3px;
+  background: var(--cream-dark);
+  color: var(--ink-mid);
+}
+.m-cell.zero { background: transparent; color: var(--rule); }
+
+/* ── Log ── */
+#log-wrap {
+  max-height: 190px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cream-darker) transparent;
+}
+.log-line {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ink-light);
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(30,27,22,0.04);
+  opacity: 0;
+  animation: fadeUp 0.25s ease forwards;
+}
+.log-line.relax  { color: var(--red); }
+.log-line.pick   { color: var(--teal); }
+.log-line.done   { color: var(--gold); font-weight: 500; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+
+/* ── Abstract box ── */
+.abstract-box {
+  border-left: 3px solid var(--red);
+  padding: 12px 16px;
+  background: var(--red-soft);
+  font-style: italic;
+  font-size: 13.5px;
+  color: var(--ink-mid);
+  line-height: 1.65;
+  margin-bottom: 18px;
+}
+
+/* ── Legend row ── */
+.legend-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-mid); font-style: italic; }
+.leg-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; border: 1.5px solid; }
+.leg-line { width: 20px; height: 2px; flex-shrink: 0; }
+
+/* ── Formula box ── */
+.formula {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  background: var(--teal-soft);
+  border: 1px solid rgba(26,92,92,0.2);
+  padding: 8px 14px;
+  color: var(--teal);
+  display: inline-block;
+  letter-spacing: 0.04em;
+}
+
+/* ── Complexity chip ── */
+.complexity {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  background: var(--gold-soft);
+  border: 1px solid rgba(139,105,20,0.2);
+  color: var(--gold);
+  padding: 4px 12px;
+  display: inline-block;
+}
+
+/* ── Footer ── */
+.footer-rule {
+  border: none;
+  border-top: 3px double var(--rule);
+  margin: 36px 0 20px;
+}
+.footer-text {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--ink-light);
+  text-align: center;
+  line-height: 2;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .main-grid { flex-direction: column !important; }
+  .col-rule { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- Masthead -->
+  <header class="masthead">
+    <div class="masthead-kicker">Department of Networking and Communication · SRM Institute of Science and Technology</div>
+    <h1 class="masthead-title">Smart Traffic-Aware<br><em>Shortest Path Algorithm</em><br>for Dynamic Road Networks</h1>
+    <p class="masthead-sub">
+      A modified Dijkstra implementation incorporating real-time traffic conditions
+      alongside static road distances to compute more realistic navigation routes.
+    </p>
+    <div class="byline">
+      <strong>Debaditya Malakar</strong> · RA2411028010034 &emsp;|&emsp;
+      <strong>Monish Ravibalaji</strong> · RA2411028010013 &emsp;|&emsp;
+      <strong>Syed Gaffar Mohammed</strong> · RA2411028010047 &emsp;|&emsp; <br/>
+      Course project — Algorithm Design &amp; Analysis
+    </div>
+  </header>
+
+  <!-- Abstract + formula bar -->
+  <div class="abstract-box">
+    Traditional shortest path algorithms optimise routes on distance alone. Real-world navigation
+    must account for traffic congestion, incidents, and variable road conditions. This implementation
+    modifies edge weights as <strong style="font-style:normal">w = distance + traffic factor</strong>, 
+    enabling the algorithm to prefer less congested routes over geometrically shorter ones.
+  </div>
+
+  <div class="flex flex-wrap gap-4 items-center mb-6">
+    <div>
+      <div class="section-label" style="border:none;padding:0;margin-bottom:4px">Effective Edge Weight</div>
+      <div class="formula">w(u,v) = dist(u,v) + traffic(u,v)</div>
+    </div>
+    <div>
+      <div class="section-label" style="border:none;padding:0;margin-bottom:4px">Time Complexity</div>
+      <div class="complexity">O((V + E) log V)</div>
+    </div>
+    <div class="ml-auto">
+      <div class="section-label" style="border:none;padding:0;margin-bottom:4px">Implementation</div>
+      <div class="mono text-xs" style="color:var(--ink-light)">C language · V = 5 nodes · Source: A</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="ctrl-bar">
+    <button class="btn primary" id="stepBtn" onclick="stepAlgo()">Step through →</button>
+    <button class="btn" id="autoBtn" onclick="autoRun()">Auto-run</button>
+    <button class="btn" onclick="resetAlgo()">Reset</button>
+    <div class="step-pill" id="stepPill">Iteration 0 of —</div>
+  </div>
+
+  <!-- Main two-column grid -->
+  <div class="main-grid" style="display:flex;gap:0;border:1px solid var(--rule)">
+
+    <!-- Left: Graph -->
+    <div style="flex:1.5;min-width:0">
+      <div style="padding:20px;border-bottom:1px solid var(--rule)">
+        <div class="section-label">Fig. 1 — Road Network Graph (5 nodes, weighted edges)</div>
+        <svg id="graph" viewBox="0 0 520 360" style="width:100%;height:auto;max-height:360px;display:block"></svg>
+      </div>
+      <!-- Legend -->
+      <div style="padding:14px 20px;border-bottom:1px solid var(--rule);display:flex;flex-wrap:wrap;gap:16px;background:var(--cream-dark)">
+        <div class="legend-item"><div class="leg-dot" style="background:#f5ede0;border-color:var(--gold)"></div>Source node</div>
+        <div class="legend-item"><div class="leg-dot" style="background:#e8f0f0;border-color:var(--teal)"></div>Current (examining)</div>
+        <div class="legend-item"><div class="leg-dot" style="background:#f0ebe8;border-color:var(--red)"></div>Settled</div>
+        <div class="legend-item"><div class="leg-line" style="background:var(--red)"></div>Relaxed edge</div>
+        <div class="legend-item"><div class="leg-line" style="background:var(--teal);border-top:2px dashed var(--teal)"></div>Examining</div>
+        <div class="ml-auto legend-item mono" style="font-style:normal;font-size:10px;color:var(--ink-light)">Labels: d + t = w</div>
+      </div>
+      <!-- Execution log -->
+      <div style="padding:16px 20px">
+        <div class="section-label">Execution Log</div>
+        <div id="log-wrap"><div id="log"></div></div>
+      </div>
+    </div>
+
+    <div class="col-rule"></div>
+
+    <!-- Right: tables & matrices -->
+    <div style="flex:1;min-width:260px;display:flex;flex-direction:column;border-left:1px solid var(--rule)">
+
+      <!-- Distance table -->
+      <div style="padding:20px;border-bottom:1px solid var(--rule)">
+        <div class="section-label">Distance Table</div>
+        <table class="dist-table">
+          <thead><tr>
+            <th>Node</th><th>Best dist.</th><th>Status</th>
+          </tr></thead>
+          <tbody id="distTable"></tbody>
+        </table>
+      </div>
+
+      <!-- Matrices -->
+      <div style="padding:20px;border-bottom:1px solid var(--rule)">
+        <div class="section-label">Input Matrices (adjacency)</div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <div class="mono mb-2" style="font-size:9px;letter-spacing:0.1em;color:var(--ink-light);text-transform:uppercase">Distance</div>
+            <div class="matrix-grid" id="distMatrix"></div>
+          </div>
+          <div>
+            <div class="mono mb-2" style="font-size:9px;letter-spacing:0.1em;color:var(--ink-light);text-transform:uppercase">Traffic</div>
+            <div class="matrix-grid" id="traffMatrix"></div>
+          </div>
+        </div>
+        <p class="mono mt-3" style="font-size:9px;color:var(--ink-light);line-height:1.6">
+          Rows/cols 0–4 correspond to nodes A–E.<br>
+          Zero entries indicate no direct road segment.
+        </p>
+      </div>
+
+      <!-- Node index -->
+      <div style="padding:20px;flex:1">
+        <div class="section-label">Node Index</div>
+        <div class="grid grid-cols-5 gap-1 mb-3">
+          <div class="mono text-center p-2" style="font-size:11px;background:var(--cream-dark);border:1px solid var(--rule)">A<br><span style="opacity:0.5">0</span></div>
+          <div class="mono text-center p-2" style="font-size:11px;background:var(--cream-dark);border:1px solid var(--rule)">B<br><span style="opacity:0.5">1</span></div>
+          <div class="mono text-center p-2" style="font-size:11px;background:var(--cream-dark);border:1px solid var(--rule)">C<br><span style="opacity:0.5">2</span></div>
+          <div class="mono text-center p-2" style="font-size:11px;background:var(--cream-dark);border:1px solid var(--rule)">D<br><span style="opacity:0.5">3</span></div>
+          <div class="mono text-center p-2" style="font-size:11px;background:var(--cream-dark);border:1px solid var(--rule)">E<br><span style="opacity:0.5">4</span></div>
+        </div>
+        <p style="font-size:13px;color:var(--ink-mid);font-style:italic;line-height:1.65">
+          The algorithm selects node <strong style="font-style:normal">A</strong> as source
+          (index 0). At each iteration, the unvisited node with minimum tentative distance
+          is extracted and its neighbours relaxed.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="footer-rule">
+  <div class="footer-text">
+    Dijkstra, E. W. (1959). A note on two problems in connexion with graphs. <em>Numerische Mathematik</em>, 1(1), 269–271.<br>
+    Modified for traffic-weighted road networks · Department of Networking and Communication · SRMIST · 2024–25
+  </div>
+  <div style="height:32px"></div>
+
+</div><!-- /page-wrap -->
+
+<script>
+const V = 5;
+const distance = [[0,5,7,0,0],[5,0,3,4,0],[7,3,0,2,3],[0,4,2,0,5],[0,0,3,5,0]];
+const traffic  = [[0,2,0,0,0],[2,0,3,1,0],[0,3,0,2,1],[0,1,2,0,2],[0,0,1,2,0]];
+const names    = ['A','B','C','D','E'];
+const pos      = [{x:82,y:180},{x:205,y:68},{x:308,y:180},{x:205,y:292},{x:432,y:180}];
+
+let steps=[], idx=0, done=false, running=false, timer;
+
+/* ── Build algorithm steps ── */
+function buildSteps(src) {
+  const d=[...Array(V)].map(()=>Infinity), vis=Array(V).fill(false);
+  d[src]=0;
+  const out=[];
+  out.push({type:'init',d:[...d],vis:[...vis],u:-1,edge:null,
+    msg:`Init: dist[${names[src]}] = 0; all others = ∞`});
+  for(let it=0;it<V-1;it++){
+    let mn=Infinity,u=-1;
+    for(let v=0;v<V;v++) if(!vis[v]&&d[v]<=mn){mn=d[v];u=v;}
+    if(u===-1) break;
+    vis[u]=true;
+    out.push({type:'pick',d:[...d],vis:[...vis],u,edge:null,
+      msg:`Extract min → node ${names[u]}  (dist = ${d[u]})`});
+    for(let v=0;v<V;v++){
+      if(!vis[v]&&distance[u][v]){
+        const w=distance[u][v]+traffic[u][v];
+        out.push({type:'examine',d:[...d],vis:[...vis],u,edge:{u,v},
+          msg:`  Examine ${names[u]}→${names[v]}: road=${distance[u][v]}, traffic=${traffic[u][v]}, w=${w}`});
+        if(d[u]!==Infinity&&d[u]+w<d[v]){
+          d[v]=d[u]+w;
+          out.push({type:'relax',d:[...d],vis:[...vis],u,edge:{u,v},
+            msg:`  ✓  Relax ${names[u]}→${names[v]}: dist[${names[v]}] ← ${d[v]}`});
+        } else {
+          out.push({type:'norelax',d:[...d],vis:[...vis],u,edge:{u,v},
+            msg:`  –  No improvement for ${names[v]} (current = ${d[v]===Infinity?'∞':d[v]})`});
+        }
+      }
+    }
+  }
+  out.push({type:'done',d:[...d],vis:[...vis],u:-1,edge:null,
+    msg:`■  Algorithm complete. All shortest paths from source ${names[src]} computed.`});
+  return out;
+}
+
+/* ── SVG ── */
+function buildSVG(){
+  const svg=document.getElementById('graph'); svg.innerHTML='';
+  // Edges
+  for(let u=0;u<V;u++) for(let v=u+1;v<V;v++){
+    if(!distance[u][v]) continue;
+    const p1=pos[u],p2=pos[v];
+    const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2;
+    const dx=p2.x-p1.x,dy=p2.y-p1.y,len=Math.sqrt(dx*dx+dy*dy);
+    const ox=-dy/len*11, oy=dx/len*11;
+    const path=document.createElementNS('http://www.w3.org/2000/svg','line');
+    path.setAttribute('x1',p1.x);path.setAttribute('y1',p1.y);
+    path.setAttribute('x2',p2.x);path.setAttribute('y2',p2.y);
+    path.setAttribute('class','edge-path');path.setAttribute('id',`ep-${u}-${v}`);
+    svg.appendChild(path);
+    const wt=document.createElementNS('http://www.w3.org/2000/svg','text');
+    wt.setAttribute('x',mx+ox);wt.setAttribute('y',my+oy-6);
+    wt.setAttribute('class','edge-lbl');
+    wt.textContent=`${distance[u][v]}+${traffic[u][v]}`;
+    svg.appendChild(wt);
+    const ws=document.createElementNS('http://www.w3.org/2000/svg','text');
+    ws.setAttribute('x',mx+ox);ws.setAttribute('y',my+oy+6);
+    ws.setAttribute('class','edge-sub');
+    ws.textContent=`= ${distance[u][v]+traffic[u][v]}`;
+    svg.appendChild(ws);
+  }
+  // Nodes
+  for(let i=0;i<V;i++){
+    const {x,y}=pos[i];
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r','24');
+    c.setAttribute('class','node-circle'+(i===0?' source':''));
+    c.setAttribute('id',`nc-${i}`);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','text');
+    l.setAttribute('x',x);l.setAttribute('y',y);
+    l.setAttribute('class','node-label');l.textContent=names[i];
+    const dl=document.createElementNS('http://www.w3.org/2000/svg','text');
+    dl.setAttribute('x',x);dl.setAttribute('y',y+40);
+    dl.setAttribute('class','dist-badge');dl.setAttribute('id',`db-${i}`);
+    dl.textContent=i===0?'0':'∞';
+    g.appendChild(c);g.appendChild(l);g.appendChild(dl);
+    svg.appendChild(g);
+  }
+}
+
+/* ── Render step ── */
+function render(step){
+  // Edges reset
+  for(let u=0;u<V;u++) for(let v=u+1;v<V;v++){
+    const el=document.getElementById(`ep-${u}-${v}`);
+    if(el) el.setAttribute('class','edge-path');
+  }
+  // Nodes + dist
+  for(let i=0;i<V;i++){
+    const nc=document.getElementById(`nc-${i}`);
+    const db=document.getElementById(`db-${i}`);
+    let cls='node-circle';
+    if(i===0) cls+=' source';
+    if(step.vis[i]) cls+=' visited';
+    if(step.u===i&&step.type!=='done') cls='node-circle current';
+    nc.setAttribute('class',cls);
+    const val=step.d[i];
+    db.textContent=val===Infinity?'∞':val;
+    db.setAttribute('class','dist-badge'+(step.vis[i]?' settled':val!==Infinity&&val!==0?' live':''));
+  }
+  // Edge highlight
+  if(step.edge){
+    const {u,v}=step.edge;
+    const key=u<v?`${u}-${v}`:`${v}-${u}`;
+    const el=document.getElementById(`ep-${key}`);
+    if(el) el.setAttribute('class','edge-path '+(step.type==='relax'?'relaxed':'examining'));
+  }
+  renderTable(step);
+  appendLog(step);
+  document.getElementById('stepPill').textContent=`Iteration ${idx} of ${steps.length-1}`;
+}
+
+function renderTable(step){
+  const tb=document.getElementById('distTable'); tb.innerHTML='';
+  for(let i=0;i<V;i++){
+    const dv=step.d[i];
+    const cur=step.u===i&&step.type!=='done';
+    const set=step.vis[i];
+    const c=cur?'var(--teal)':set?'var(--red)':'var(--ink)';
+    const status=set?'settled':cur?'processing':dv===Infinity?'unreached':'tentative';
+    tb.innerHTML+=`<tr>
+      <td style="color:${c};font-family:'Playfair Display',serif;font-size:15px">${names[i]}</td>
+      <td class="mono" style="color:${c};font-size:13px">${dv===Infinity?'∞':dv}</td>
+      <td style="color:${c};font-style:italic;font-size:12px;opacity:0.85">${status}</td>
+    </tr>`;
+  }
+}
+
+function appendLog(step){
+  const log=document.getElementById('log');
+  const el=document.createElement('div');
+  const cls={'relax':'relax','pick':'pick','done':'done','init':''}[step.type]||'';
+  el.className='log-line '+cls;
+  el.textContent=step.msg;
+  log.appendChild(el);
+  document.getElementById('log-wrap').scrollTop=9999;
+}
+
+function buildMatrices(){
+  function fill(id,mat){
+    const el=document.getElementById(id); el.innerHTML='';
+    for(let i=0;i<V;i++) for(let j=0;j<V;j++){
+      const c=document.createElement('div');
+      c.className='m-cell'+(mat[i][j]===0?' zero':'');
+      c.textContent=mat[i][j]||'·';
+      el.appendChild(c);
+    }
+  }
+  fill('distMatrix',distance); fill('traffMatrix',traffic);
+}
+
+/* ── Controls ── */
+function stepAlgo(){
+  if(done) return;
+  idx++;
+  if(idx>=steps.length){idx=steps.length-1;return;}
+  render(steps[idx]);
+  if(idx>=steps.length-1){ done=true; document.getElementById('stepBtn').disabled=true; document.getElementById('autoBtn').disabled=true; }
+}
+function autoRun(){
+  if(running){clearInterval(timer);running=false;document.getElementById('autoBtn').textContent='Auto-run';return;}
+  if(done) return;
+  running=true; document.getElementById('autoBtn').textContent='Pause';
+  timer=setInterval(()=>{ stepAlgo(); if(done){clearInterval(timer);running=false;document.getElementById('autoBtn').textContent='Auto-run';} },800);
+}
+function resetAlgo(){
+  clearInterval(timer);running=false;done=false;idx=0;
+  document.getElementById('autoBtn').textContent='Auto-run';
+  document.getElementById('stepBtn').disabled=false;
+  document.getElementById('autoBtn').disabled=false;
+  document.getElementById('log').innerHTML='';
+  steps=buildSteps(0); buildSVG(); buildMatrices(); render(steps[0]);
+}
+
+steps=buildSteps(0); buildSVG(); buildMatrices(); render(steps[0]);
+</script>
+</body>
+</html>
